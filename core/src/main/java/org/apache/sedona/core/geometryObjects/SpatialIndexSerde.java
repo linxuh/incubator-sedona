@@ -24,6 +24,7 @@ import com.esotericsoftware.kryo.Serializer;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 import org.apache.log4j.Logger;
+import org.locationtech.jts.index.adaptivequadtree.AdaptiveQuadTreeIndex;
 import org.locationtech.jts.index.quadtree.IndexSerde;
 import org.locationtech.jts.index.quadtree.Quadtree;
 import org.locationtech.jts.index.strtree.STRtree;
@@ -58,7 +59,14 @@ public class SpatialIndexSerde
     @Override
     public void write(Kryo kryo, Output output, Object o)
     {
-        if (o instanceof Quadtree) {
+        if(o instanceof AdaptiveQuadTreeIndex){
+            writeType(output, Type.AGridQUADTREE);
+            AdaptiveQuadTreeIndex tree = (AdaptiveQuadTreeIndex) o;
+            org.locationtech.jts.index.adaptivequadtree.IndexSerde indexSerde
+                    = new org.locationtech.jts.index.adaptivequadtree.IndexSerde();
+            indexSerde.write(kryo, output, tree);
+        }
+        else if (o instanceof Quadtree) {
             // serialize quadtree index
             writeType(output, Type.QUADTREE);
             Quadtree tree = (Quadtree) o;
@@ -84,6 +92,11 @@ public class SpatialIndexSerde
         byte typeID = input.readByte();
         Type indexType = Type.fromId(typeID);
         switch (indexType) {
+            case AGridQUADTREE:{
+                org.locationtech.jts.index.adaptivequadtree.IndexSerde indexSerde=
+                        new org.locationtech.jts.index.adaptivequadtree.IndexSerde();
+                return indexSerde.read(kryo, input);
+            }
             case QUADTREE: {
                 IndexSerde indexSerde = new IndexSerde();
                 return indexSerde.read(kryo, input);
@@ -108,7 +121,8 @@ public class SpatialIndexSerde
     {
 
         QUADTREE(0),
-        RTREE(1);
+        RTREE(1),
+        AGridQUADTREE(2);
 
         private final int id;
 

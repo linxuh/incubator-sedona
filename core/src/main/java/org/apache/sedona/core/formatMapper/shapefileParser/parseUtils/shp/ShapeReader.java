@@ -26,6 +26,8 @@ public interface ShapeReader
 
     double readDouble();
 
+    long readLong();
+
     byte readByte();
 
     void skip(int numBytes);

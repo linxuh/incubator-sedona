@@ -19,6 +19,9 @@
 
 package org.apache.sedona.core.joinJudgement;
 
+import com.whu.edu.JTS.GridPoint;
+import com.whu.edu.JTS.GridPointInPolygon;
+import com.whu.edu.JTS.GridPolygon2;
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
 import org.apache.sedona.core.utils.HalfOpenRectangle;
@@ -101,6 +104,12 @@ abstract class JudgementBase
     protected boolean match(Geometry left, Geometry right)
     {
         if (extent != null) {
+            if(left instanceof GridPolygon2 && right instanceof GridPoint){
+                return GridPointInPolygon.contain((GridPolygon2 )left,(GridPoint)right);
+            }else if(left instanceof GridPoint && right instanceof GridPolygon2){
+                return GridPointInPolygon.contain((GridPolygon2 )right,(GridPoint)left);
+            }
+
             // Handle easy case: points. Since each point is assigned to exactly one partition,
             // different partitions cannot emit duplicate results.
             if (left instanceof Point || right instanceof Point) {
@@ -135,5 +144,9 @@ abstract class JudgementBase
     {
         //log.warn("Check "+left.toText()+" with "+right.toText());
         return considerBoundaryIntersection ? left.intersects(right) : left.covers(right);
+    }
+
+    public DedupParams getDedupParams(){
+        return dedupParams;
     }
 }

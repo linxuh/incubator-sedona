@@ -31,7 +31,10 @@ public enum ShapeType
     POINT(1),
     POLYLINE(3),
     POLYGON(5),
-    MULTIPOINT(8);
+    MULTIPOINT(8),
+    GRIDPOINT(10),
+    GRIDLINESTRING(11),
+    GRIDPOLYGON(12);
 
     private final int id;
 
@@ -62,6 +65,15 @@ public enum ShapeType
             case 8:
                 type = MULTIPOINT;
                 break;
+            case 10:
+                type = GRIDPOINT;
+                break;
+            case 11:
+                type = GRIDLINESTRING;
+                break;
+            case 12:
+                type = GRIDPOLYGON;
+                break;
             default:
                 type = UNDEFINED;
         }
@@ -85,6 +97,12 @@ public enum ShapeType
                 return new PolygonParser(geometryFactory);
             case MULTIPOINT:
                 return new MultiPointParser(geometryFactory);
+            case GRIDPOINT:
+                return new GridPointParser(geometryFactory);
+            case GRIDLINESTRING:
+                return new GridLineStringParser(geometryFactory);
+            case GRIDPOLYGON:
+                return new GridPolygonParser(geometryFactory);
             default:
                 throw new TypeUnknownException(id);
         }

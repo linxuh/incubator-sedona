@@ -38,7 +38,12 @@ public enum IndexType
     /**
      * The rtree.
      */
-    RTREE;
+    RTREE,
+
+    /**
+     * adaptiveTree
+     */
+    AGridQUADTREE;
 
     /**
      * Gets the index type.

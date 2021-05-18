@@ -38,7 +38,10 @@ public enum GeometryType
     MULTILINESTRING,
     GEOMETRYCOLLECTION,
     CIRCLE,
-    RECTANGLE;
+    RECTANGLE,
+    GRIDPOINT,
+    GRIDLINRSTRING,
+    GRIDPOLYGON;
 
     /**
      * Gets the GeometryType.

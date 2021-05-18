@@ -29,9 +29,7 @@ import org.apache.sedona.core.serde.SedonaKryoRegistrator;
 import org.apache.sedona.core.spatialOperator.JoinQuery;
 import org.apache.sedona.core.spatialOperator.KNNQuery;
 import org.apache.sedona.core.spatialOperator.RangeQuery;
-import org.apache.sedona.core.spatialRDD.CircleRDD;
-import org.apache.sedona.core.spatialRDD.PointRDD;
-import org.apache.sedona.core.spatialRDD.PolygonRDD;
+import org.apache.sedona.core.spatialRDD.*;
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.serializer.KryoSerializer;
@@ -67,6 +65,7 @@ public class Example
      * The Point RDD input location.
      */
     static String PointRDDInputLocation;
+    static String GridPointRDDInputLocation;
 
     /**
      * The Point RDD offset.
@@ -77,26 +76,34 @@ public class Example
      * The Point RDD num partitions.
      */
     static Integer PointRDDNumPartitions;
+    static Integer GridPointRDDNumPartitions;
 
     /**
      * The Point RDD splitter.
      */
     static FileDataSplitter PointRDDSplitter;
+    static FileDataSplitter GridPointRDDSplitter;
 
     /**
      * The Point RDD index type.
      */
     static IndexType PointRDDIndexType;
+    static IndexType GridPointRDDIndexType;
+
+    static IndexType PolygonRDDIndexType;
+    static IndexType GridPolygonRDDIndexType;
 
     /**
      * The object RDD.
      */
     static PointRDD objectRDD;
+    static GridPointRDD gridObjectRDD;
 
     /**
      * The Polygon RDD input location.
      */
     static String PolygonRDDInputLocation;
+    static String GridPolygonRDDInputLocation;
 
     /**
      * The Polygon RDD start offset.
@@ -112,21 +119,25 @@ public class Example
      * The Polygon RDD num partitions.
      */
     static Integer PolygonRDDNumPartitions;
+    static Integer GridPolygonRDDNumPartitions;
 
     /**
      * The Polygon RDD splitter.
      */
     static FileDataSplitter PolygonRDDSplitter;
+    static FileDataSplitter GridPolygonRDDSplitter;
 
     /**
      * The query window RDD.
      */
     static PolygonRDD queryWindowRDD;
+    static GridPolygonRDD gridQueryWindowRDD;
 
     /**
      * The join query partitioning type.
      */
     static GridType joinQueryPartitioningType;
+    static GridType gridjoinQueryPartitioningType;
 
     /**
      * The each query loop times.
@@ -145,6 +156,7 @@ public class Example
 
     static String ShapeFileInputLocation;
 
+
     /**
      * The main method.
      *
@@ -152,48 +164,64 @@ public class Example
      */
     public static void main(String[] args)
     {
-        SparkConf conf = new SparkConf().setAppName("SedonaRunnableExample").setMaster("local[2]");
+        SparkConf conf = new SparkConf().setAppName("SedonaRunnableExample");
         conf.set("spark.serializer", KryoSerializer.class.getName());
         conf.set("spark.kryo.registrator", SedonaKryoRegistrator.class.getName());
 
         sc = new JavaSparkContext(conf);
-        Logger.getLogger("org").setLevel(Level.WARN);
-        Logger.getLogger("akka").setLevel(Level.WARN);
+        //Logger.getLogger("org").setLevel(Level.WARN);
+        //Logger.getLogger("akka").setLevel(Level.WARN);
 
-        String resourceFolder = System.getProperty("user.dir") + "/src/test/resources/";
+        String resourceFolder = "/hlx/input/";
 
-        PointRDDInputLocation = resourceFolder + "arealm-small.csv";
-        PointRDDSplitter = FileDataSplitter.CSV;
+        PointRDDInputLocation = resourceFolder + "Gowalla_totalCheckins.txt";
+        PointRDDSplitter = FileDataSplitter.TAB;
         PointRDDIndexType = IndexType.RTREE;
-        PointRDDNumPartitions = 5;
-        PointRDDOffset = 0;
+        PointRDDNumPartitions = 8;
+        PointRDDOffset = 2;
 
-        PolygonRDDInputLocation = resourceFolder + "primaryroads-polygon.csv";
-        PolygonRDDSplitter = FileDataSplitter.CSV;
-        PolygonRDDNumPartitions = 5;
+        GridPointRDDInputLocation = resourceFolder + "Gowalla_totalCheckins.txt";
+        GridPointRDDSplitter = FileDataSplitter.TAB;
+        GridPointRDDIndexType = IndexType.AGridQUADTREE;
+        GridPointRDDNumPartitions = 8;
+
+        PolygonRDDInputLocation = resourceFolder + "gadm36_2.json";
+        PolygonRDDSplitter = FileDataSplitter.GEOJSON;
+        PolygonRDDIndexType = IndexType.RTREE;
+        PolygonRDDNumPartitions = 8;
         PolygonRDDStartOffset = 0;
         PolygonRDDEndOffset = 8;
+
+        GridPolygonRDDInputLocation = resourceFolder + "gadm36_2.json";
+        GridPolygonRDDSplitter = FileDataSplitter.GEOJSON;
+        GridPolygonRDDIndexType = IndexType.AGridQUADTREE;
+        GridPolygonRDDNumPartitions = 8;
 
         geometryFactory = new GeometryFactory();
         kNNQueryPoint = geometryFactory.createPoint(new Coordinate(-84.01, 34.01));
         rangeQueryWindow = new Envelope(-90.01, -80.01, 30.01, 40.01);
         joinQueryPartitioningType = GridType.QUADTREE;
-        eachQueryLoopTimes = 5;
+        gridjoinQueryPartitioningType = GridType.AGRIDQUADTREE;
+        eachQueryLoopTimes = 2;
 
         ShapeFileInputLocation = resourceFolder + "shapefiles/polygon";
 
         try {
-            testSpatialRangeQuery();
+            /*testSpatialRangeQuery();
             testSpatialRangeQueryUsingIndex();
             testSpatialKnnQuery();
             testSpatialKnnQueryUsingIndex();
-            testSpatialJoinQuery();
-            testSpatialJoinQueryUsingIndex();
-            testDistanceJoinQuery();
+            testSpatialJoinQuery();*/
+            testSpatialJoinQueryUsingPointIndexGrid();
+            testSpatialJoinQueryUsingPolygonIndexGrid();
+            testSpatialJoinQueryUsingPolygonIndex();
+            testSpatialJoinQueryUsingPointIndex();
+
+            /*testDistanceJoinQuery();
             testDistanceJoinQueryUsingIndex();
             testCRSTransformationSpatialRangeQuery();
             testCRSTransformationSpatialRangeQueryUsingIndex();
-            testLoadShapefileIntoPolygonRDD();
+            testLoadShapefileIntoPolygonRDD();*/
         }
         catch (Exception e) {
             e.printStackTrace();
@@ -278,8 +306,8 @@ public class Example
     public static void testSpatialJoinQuery()
             throws Exception
     {
-        queryWindowRDD = new PolygonRDD(sc, PolygonRDDInputLocation, PolygonRDDStartOffset, PolygonRDDEndOffset, PolygonRDDSplitter, true);
-        objectRDD = new PointRDD(sc, PointRDDInputLocation, PointRDDOffset, PointRDDSplitter, true, StorageLevel.MEMORY_ONLY());
+        queryWindowRDD = new PolygonRDD(sc, PolygonRDDInputLocation, null, null, PolygonRDDSplitter, true,PolygonRDDNumPartitions);
+        objectRDD = new PointRDD(sc, PointRDDInputLocation, PointRDDOffset, PointRDDSplitter, true,PointRDDNumPartitions);
 
         objectRDD.spatialPartitioning(joinQueryPartitioningType);
         queryWindowRDD.spatialPartitioning(objectRDD.getPartitioner());
@@ -297,24 +325,132 @@ public class Example
      *
      * @throws Exception the exception
      */
-    public static void testSpatialJoinQueryUsingIndex()
+    public static void testSpatialJoinQueryUsingPolygonIndex()
             throws Exception
     {
-        queryWindowRDD = new PolygonRDD(sc, PolygonRDDInputLocation, PolygonRDDStartOffset, PolygonRDDEndOffset, PolygonRDDSplitter, true);
-        objectRDD = new PointRDD(sc, PointRDDInputLocation, PointRDDOffset, PointRDDSplitter, true, StorageLevel.MEMORY_ONLY());
+        queryWindowRDD = new PolygonRDD(sc, PolygonRDDInputLocation, null, null, PolygonRDDSplitter, true,PolygonRDDNumPartitions);
+        objectRDD = new PointRDD(sc, PointRDDInputLocation, PointRDDOffset, PointRDDSplitter, true, PointRDDNumPartitions);
+        queryWindowRDD.analyze();
 
+        long startPtime = System.currentTimeMillis();
+        queryWindowRDD.spatialPartitioning(joinQueryPartitioningType);
+        objectRDD.spatialPartitioning(queryWindowRDD.getPartitioner());
+        long endPtime = System.currentTimeMillis();
+
+        long startItime = System.currentTimeMillis();
+        queryWindowRDD.buildIndex(PolygonRDDIndexType, true);
+        long endItime = System.currentTimeMillis();
+
+        queryWindowRDD.indexedRDD.persist(StorageLevel.MEMORY_ONLY());
+        objectRDD.spatialPartitionedRDD.persist(StorageLevel.MEMORY_ONLY());
+
+        long startJtime = System.currentTimeMillis();
+        for (int i = 0; i < eachQueryLoopTimes; i++) {
+            long resultSize = JoinQuery.SpatialJoinQueryFlat(objectRDD, queryWindowRDD, true, false).count();
+            System.out.println("join result size:"+resultSize);
+        }
+        long endJtime = System.currentTimeMillis();
+
+        System.out.println("--Test GeoSpark Contain Join Query using PolygonIndex--");
+        System.out.println("Partition Time:" + (endPtime-startPtime));
+        System.out.println("Index Time:" + (endItime-startItime));
+        System.out.println("Join Time:" + (endJtime-startJtime)/eachQueryLoopTimes);
+    }
+
+    public static void testSpatialJoinQueryUsingPolygonIndexGrid()
+            throws Exception
+    {
+        gridQueryWindowRDD = new GridPolygonRDD(sc, GridPolygonRDDInputLocation, null, null, GridPolygonRDDSplitter, true,GridPolygonRDDNumPartitions);
+        gridObjectRDD = new GridPointRDD(sc, GridPointRDDInputLocation, PointRDDOffset, GridPointRDDSplitter, true, GridPointRDDNumPartitions);
+        gridQueryWindowRDD.analyze();
+
+        long startPtime = System.currentTimeMillis();
+        gridQueryWindowRDD.spatialPartitioning(gridjoinQueryPartitioningType);
+        gridObjectRDD.spatialPartitioning(gridQueryWindowRDD.getPartitioner());
+        long endPtime = System.currentTimeMillis();
+
+        long startItime = System.currentTimeMillis();
+        gridQueryWindowRDD.buildIndex(GridPolygonRDDIndexType, true, gridQueryWindowRDD.getPartitioner());
+        long endItime = System.currentTimeMillis();
+
+        gridQueryWindowRDD.indexedRDD.persist(StorageLevel.MEMORY_ONLY());
+        gridObjectRDD.spatialPartitionedRDD.persist(StorageLevel.MEMORY_ONLY());
+
+        long startJtime = System.currentTimeMillis();
+        for (int i = 0; i < eachQueryLoopTimes; i++) {
+            long resultSize = JoinQuery.SpatialJoinQueryFlat(gridQueryWindowRDD, gridObjectRDD, true, false).count();
+            System.out.println("join result size:"+resultSize);
+        }
+        long endJtime = System.currentTimeMillis();
+
+        System.out.println("--Test Grid Contain Join Query using PolygonIndex--");
+        System.out.println("Partition Time:" + (endPtime-startPtime));
+        System.out.println("Index Time:" + (endItime-startItime));
+        System.out.println("Join Time:" + (endJtime-startJtime)/eachQueryLoopTimes);
+    }
+
+    public static void testSpatialJoinQueryUsingPointIndex()
+            throws Exception
+    {
+        queryWindowRDD = new PolygonRDD(sc, PolygonRDDInputLocation, null, null, PolygonRDDSplitter, true,PolygonRDDNumPartitions);
+        objectRDD = new PointRDD(sc, PointRDDInputLocation, PointRDDOffset, PointRDDSplitter, true, PointRDDNumPartitions);
+        objectRDD.analyze();
+
+        long startPtime = System.currentTimeMillis();
         objectRDD.spatialPartitioning(joinQueryPartitioningType);
         queryWindowRDD.spatialPartitioning(objectRDD.getPartitioner());
+        long endPtime = System.currentTimeMillis();
 
+        long startItime = System.currentTimeMillis();
         objectRDD.buildIndex(PointRDDIndexType, true);
+        long endItime = System.currentTimeMillis();
 
         objectRDD.indexedRDD.persist(StorageLevel.MEMORY_ONLY());
         queryWindowRDD.spatialPartitionedRDD.persist(StorageLevel.MEMORY_ONLY());
 
+        long startJtime = System.currentTimeMillis();
         for (int i = 0; i < eachQueryLoopTimes; i++) {
-            long resultSize = JoinQuery.SpatialJoinQuery(objectRDD, queryWindowRDD, true, false).count();
-            assert resultSize > 0;
+            long resultSize = JoinQuery.SpatialJoinQueryFlat(objectRDD, queryWindowRDD, true, false).count();
+            System.out.println("join result size:"+resultSize);
         }
+        long endJtime = System.currentTimeMillis();
+
+        System.out.println("--Test GeoSpark Contain Join Query using PointIndex--");
+        System.out.println("Partition Time:" + (endPtime-startPtime));
+        System.out.println("Index Time:" + (endItime-startItime));
+        System.out.println("Join Time:" + (endJtime-startJtime)/eachQueryLoopTimes);
+    }
+
+    public static void testSpatialJoinQueryUsingPointIndexGrid()
+            throws Exception
+    {
+        gridQueryWindowRDD = new GridPolygonRDD(sc, GridPolygonRDDInputLocation, null, null, GridPolygonRDDSplitter, true,GridPolygonRDDNumPartitions);
+        gridObjectRDD = new GridPointRDD(sc, GridPointRDDInputLocation, PointRDDOffset, GridPointRDDSplitter, true, GridPointRDDNumPartitions);
+        gridObjectRDD.analyze();
+
+        long startPtime = System.currentTimeMillis();
+        gridObjectRDD.spatialPartitioning(gridjoinQueryPartitioningType);
+        gridQueryWindowRDD.spatialPartitioning(gridObjectRDD.getPartitioner());
+        long endPtime = System.currentTimeMillis();
+
+        long startItime = System.currentTimeMillis();
+        gridObjectRDD.buildIndex(GridPointRDDIndexType, true, gridObjectRDD.getPartitioner());
+        long endItime = System.currentTimeMillis();
+
+        gridObjectRDD.indexedRDD.persist(StorageLevel.MEMORY_ONLY());
+        gridQueryWindowRDD.spatialPartitionedRDD.persist(StorageLevel.MEMORY_ONLY());
+
+        long startJtime = System.currentTimeMillis();
+        for (int i = 0; i < eachQueryLoopTimes; i++) {
+            long resultSize = JoinQuery.SpatialJoinQueryFlat(gridObjectRDD, gridQueryWindowRDD, true, false).count();
+            System.out.println("join result size:"+resultSize);
+        }
+        long endJtime = System.currentTimeMillis();
+
+        System.out.println("--Test Grid Contain Join Query using PointIndex--");
+        System.out.println("Partition Time:" + (endPtime-startPtime));
+        System.out.println("Index Time:" + (endItime-startItime));
+        System.out.println("Join Time:" + (endJtime-startJtime)/eachQueryLoopTimes);
     }
 
     /**

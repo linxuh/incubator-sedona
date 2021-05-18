@@ -19,11 +19,18 @@
 
 package org.apache.sedona.core.spatialRddTool;
 
+import com.whu.edu.JTS.Grid;
+import com.whu.edu.JTS.GridPoint;
+import com.whu.edu.JTS.GridPolygon2;
 import org.apache.sedona.core.enums.IndexType;
+import org.apache.sedona.core.joinJudgement.DedupParams;
+import org.apache.sedona.core.spatialPartitioning.AdaptiveGrid;
+import org.apache.spark.TaskContext;
 import org.apache.spark.api.java.function.FlatMapFunction;
 import org.locationtech.jts.geom.Envelope;
 import org.locationtech.jts.geom.Geometry;
 import org.locationtech.jts.index.SpatialIndex;
+import org.locationtech.jts.index.adaptivequadtree.AdaptiveQuadTreeIndex;
 import org.locationtech.jts.index.quadtree.Quadtree;
 import org.locationtech.jts.index.strtree.STRtree;
 
@@ -35,10 +42,17 @@ public final class IndexBuilder<T extends Geometry>
         implements FlatMapFunction<Iterator<T>, SpatialIndex>
 {
     IndexType indexType;
+    DedupParams dedupParams;
+    final static org.apache.log4j.Logger log = org.apache.log4j.Logger.getLogger(IndexBuilder.class);
 
     public IndexBuilder(IndexType indexType)
     {
         this.indexType = indexType;
+    }
+
+    public IndexBuilder(IndexType indexType,DedupParams dedupParams){
+        this.indexType = indexType;
+        this.dedupParams = dedupParams;
     }
 
     @Override
@@ -46,18 +60,39 @@ public final class IndexBuilder<T extends Geometry>
             throws Exception
     {
         SpatialIndex spatialIndex;
+        int partitionId = TaskContext.getPartitionId();
+        log.info("current partitionid: "+ partitionId);
         if (indexType == IndexType.RTREE) {
             spatialIndex = new STRtree();
-        }
-        else {
+        }else if(indexType == IndexType.AGridQUADTREE){
+            Envelope extent = dedupParams.getPartitionExtents().get(partitionId);
+            log.info("current extent: "+extent.toString());
+            int level = (int) Math.floor( Math.log( 360 / Math.max(extent.getWidth(),extent.getHeight()*2)) / Math.log(2));
+            spatialIndex = new AdaptiveQuadTreeIndex(new Grid((byte)level,extent.centre()),25);
+            log.info("root node:"+ new Grid((byte)level,extent.centre()).toString());
+        }else {
             spatialIndex = new Quadtree();
         }
+        int count = 0;
         while (objectIterator.hasNext()) {
             T spatialObject = objectIterator.next();
-            spatialIndex.insert(spatialObject.getEnvelopeInternal(), spatialObject);
+            if(spatialObject instanceof GridPolygon2){
+                spatialIndex.insert(new AdaptiveGrid(((GridPolygon2)spatialObject).getGridID()),spatialObject);
+            }else if(spatialObject instanceof GridPoint){
+                //if(count < 5){
+                    //log.info(partitionId +": point spatial location: "+ ((GridPoint)spatialObject).getCoordinate().toString());
+                    //count++;
+                spatialIndex.insert(new AdaptiveGrid(((GridPoint)spatialObject).getId()),spatialObject);
+                //log.info("grid id:"+((GridPoint)spatialObject).getId()+",grid envelope:"+(spatialObject).getEnvelopeInternal());
+                //}
+            }else{
+                spatialIndex.insert(spatialObject.getEnvelopeInternal(), spatialObject);
+            }
+            count++;
         }
         Set<SpatialIndex> result = new HashSet();
-        spatialIndex.query(new Envelope(0.0, 0.0, 0.0, 0.0));
+        log.info("partitionId:" + partitionId + "spatialIndex num: " + count);
+        //spatialIndex.query(new Envelope(0.0, 0.0, 0.0, 0.0));
         result.add(spatialIndex);
         return result.iterator();
     }

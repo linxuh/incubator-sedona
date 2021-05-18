@@ -45,6 +45,11 @@ public class ShapeReaderFactory
             }
 
             @Override
+            public long readLong() {
+                return leBuffer.getLong();
+            }
+
+            @Override
             public byte readByte()
             {
                 return leBuffer.get();
@@ -72,6 +77,11 @@ public class ShapeReaderFactory
             public double readDouble()
             {
                 return toByteBuffer(input, 8).getDouble();
+            }
+
+            @Override
+            public long readLong() {
+                return toByteBuffer(input,8).getLong();
             }
 
             @Override

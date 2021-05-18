@@ -20,6 +20,12 @@
 package org.apache.sedona.core.formatMapper.shapefileParser.parseUtils.shp;
 
 import com.esotericsoftware.kryo.io.Input;
+import com.whu.edu.JTS.Grid;
+import com.whu.edu.JTS.GridLineString;
+import com.whu.edu.JTS.GridPoint;
+import com.whu.edu.JTS.GridPolygon2;
+import org.apache.log4j.Logger;
+import org.apache.sedona.core.geometryObjects.GeometrySerde;
 import org.locationtech.jts.geom.Geometry;
 import org.locationtech.jts.geom.GeometryFactory;
 import org.locationtech.jts.geom.LineString;
@@ -58,9 +64,25 @@ import java.nio.ByteOrder;
 public class ShapeSerde
 {
     private static final int POINT_LENGTH = 1 + 2 * ShapeFileConst.DOUBLE_LENGTH;
+    private static final int POINT_GRID_LENGTH = ShapeFileConst.LONG_LENGTH + 1;
+    private static final int POLYGON_GRID_LENGTH = ShapeFileConst.LONG_LENGTH + ShapeFileConst.BOOLEAN_LENGTH + 1;
+
+    private static final Logger log = Logger.getLogger(ShapeSerde.class);
 
     public static byte[] serialize(Geometry geometry)
     {
+        if (geometry instanceof GridPoint){
+            return serialize((GridPoint)geometry);
+        }
+
+        if (geometry instanceof GridPolygon2){
+            return serialize((GridPolygon2) geometry);
+        }
+
+        if (geometry instanceof GridLineString){
+            return serialize((GridLineString) geometry);
+        }
+
         if (geometry instanceof Point) {
             return serialize((Point) geometry);
         }
@@ -109,8 +131,21 @@ public class ShapeSerde
     {
         ByteBuffer buffer = newBuffer(POINT_LENGTH);
         putType(buffer, ShapeType.POINT);
+
         buffer.putDouble(point.getX());
         buffer.putDouble(point.getY());
+
+        return buffer.array();
+    }
+
+    private static byte[] serialize(GridPoint point)
+    {
+        ByteBuffer buffer = newBuffer(POINT_LENGTH + POINT_GRID_LENGTH);
+        putType(buffer, ShapeType.GRIDPOINT);
+        buffer.putDouble(point.getX());
+        buffer.putDouble(point.getY());
+        buffer.put(point.getId().getLevel());
+        buffer.putLong(point.getId().getGridID());
 
         return buffer.array();
     }
@@ -150,6 +185,26 @@ public class ShapeSerde
         buffer.putInt(0);
         putPoints(buffer, lineString);
         return buffer.array();
+    }
+
+    private static byte[] serialize(GridLineString lineString)
+    {
+        int numPoints = lineString.getNumPoints();
+        int numGrids = lineString.gridIDs.length;
+
+        ByteBuffer buffer = newBuffer(calculateBufferSize(numPoints, 1, numGrids));
+        putHeader(buffer, ShapeType.GRIDLINESTRING, numPoints, 1);
+        buffer.putInt(0);
+        putPoints(buffer, lineString);
+        buffer.putInt(numGrids);
+        putGrids(buffer,lineString.gridIDs,lineString.level);
+
+        return buffer.array();
+    }
+
+    private static int calculateBufferSize(int numPoints, int numParts, int numGrids)
+    {
+        return 1 + 4 * ShapeFileConst.DOUBLE_LENGTH + ShapeFileConst.INT_LENGTH + ShapeFileConst.INT_LENGTH + numParts * ShapeFileConst.INT_LENGTH + numPoints * 2 * ShapeFileConst.DOUBLE_LENGTH + numGrids * POINT_GRID_LENGTH + ShapeFileConst.INT_LENGTH;
     }
 
     private static int calculateBufferSize(int numPoints, int numParts)
@@ -195,6 +250,27 @@ public class ShapeSerde
         putRingOffsets(buffer, polygon, 0);
         putPolygonPoints(buffer, polygon);
         return buffer.array();
+    }
+
+    private static byte[] serialize(GridPolygon2 polygon)
+    {
+        int numRings = polygon.getNumInteriorRing() + 1;
+        int numPoints = polygon.getNumPoints();
+        int numGrids = polygon.getGridID().length;
+
+        ByteBuffer buffer = newBuffer(calculateBufferSizePolygon(numPoints, numRings, numGrids));
+        putHeader(buffer, ShapeType.GRIDPOLYGON, numPoints, numRings);
+        putRingOffsets(buffer, polygon, 0);
+        putPolygonPoints(buffer, polygon);
+        buffer.putInt(numGrids);
+        putGrids(buffer, polygon.getGridID(),true);
+
+        return buffer.array();
+    }
+
+    private static int calculateBufferSizePolygon(int numPoints, int numParts, int numGrids)
+    {
+        return 1 + 4 * ShapeFileConst.DOUBLE_LENGTH + ShapeFileConst.INT_LENGTH + ShapeFileConst.INT_LENGTH + numParts * ShapeFileConst.INT_LENGTH + numPoints * 2 * ShapeFileConst.DOUBLE_LENGTH + numGrids * POLYGON_GRID_LENGTH + ShapeFileConst.INT_LENGTH;
     }
 
     private static int putRingOffsets(ByteBuffer buffer, Polygon polygon, int initialOffset)
@@ -254,6 +330,27 @@ public class ShapeSerde
             Point point = geometry.getPointN(i);
             buffer.putDouble(point.getX());
             buffer.putDouble(point.getY());
+        }
+    }
+
+    private static void putGrids(ByteBuffer buffer, Grid[] grid, boolean withContain)
+    {
+        int numGrids = grid.length;
+        for (int i = 0; i < numGrids; i++) {
+            buffer.put(grid[i].getLevel());
+            buffer.putLong(grid[i].getGridID());
+            if(withContain){
+                buffer.putInt(grid[i].isContainGrid() ? 1 : 0);
+            }
+        }
+    }
+
+    private static void putGrids(ByteBuffer buffer, Long[] grid, byte level)
+    {
+        int numGrids = grid.length;
+        for (int i = 0; i < numGrids; i++) {
+            buffer.put(level);
+            buffer.putLong(grid[i]);
         }
     }
 

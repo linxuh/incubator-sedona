@@ -56,11 +56,13 @@ public interface ShapeFileConst
      * The Constant INT_LENGTH.
      */
     int INT_LENGTH = 4;
+    int BOOLEAN_LENGTH = 4;
 
     /**
      * The Constant DOUBLE_LENGTH.
      */
     int DOUBLE_LENGTH = 8;
+    int LONG_LENGTH = 8;
 
     /**
      * Consts for .dbf file

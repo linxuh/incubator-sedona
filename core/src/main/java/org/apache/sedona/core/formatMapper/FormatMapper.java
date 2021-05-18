@@ -19,17 +19,16 @@
 
 package org.apache.sedona.core.formatMapper;
 
+import com.alibaba.fastjson.JSONArray;
+import com.alibaba.fastjson.JSONObject;
+import com.whu.edu.JTS.GridPoint;
+import com.whu.edu.JTS.GridPolygon2;
 import org.apache.log4j.Logger;
 import org.apache.sedona.core.enums.FileDataSplitter;
 import org.apache.sedona.core.enums.GeometryType;
 import org.apache.spark.api.java.function.FlatMapFunction;
-import org.locationtech.jts.geom.Coordinate;
-import org.locationtech.jts.geom.Geometry;
-import org.locationtech.jts.geom.GeometryCollection;
-import org.locationtech.jts.geom.GeometryFactory;
-import org.locationtech.jts.geom.MultiLineString;
-import org.locationtech.jts.geom.MultiPoint;
-import org.locationtech.jts.geom.MultiPolygon;
+import org.locationtech.jts.geom.*;
+import org.locationtech.jts.geom.impl.CoordinateArraySequence;
 import org.locationtech.jts.io.ParseException;
 import org.locationtech.jts.io.WKBReader;
 import org.locationtech.jts.io.WKTReader;
@@ -41,13 +40,7 @@ import org.wololo.jts2geojson.GeoJSONReader;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.Serializable;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Iterator;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
+import java.util.*;
 
 public class FormatMapper<T extends Geometry>
         implements Serializable, FlatMapFunction<Iterator<String>, T>
@@ -181,31 +174,83 @@ public class FormatMapper<T extends Geometry>
     public Geometry readGeoJSON(String geoJson)
     {
         final Geometry geometry;
-        if (geoJson.contains("Feature")) {
-            Feature feature = (Feature) GeoJSONFactory.create(geoJson);
-            ArrayList<String> nonSpatialData = new ArrayList<>();
-            Map<String, Object> featurePropertiesproperties = feature.getProperties();
-            if (feature.getId() != null) {
-                nonSpatialData.add(feature.getId().toString());
-            }
-            if (featurePropertiesproperties != null) {
-                for (Object property : featurePropertiesproperties.values()
-                ) {
-                    if (property == null) {
-                        nonSpatialData.add("null");
+        switch(geometryType){
+            case GRIDPOINT:
+                geometry = parseGridPoint(geoJson,25);
+                break;
+            case GRIDPOLYGON:
+                geometry = parseGridPolygon(geoJson,25);
+                break;
+            case GRIDLINRSTRING:
+                geometry = parseGridPolygon(geoJson,25);
+                break;
+            default:
+                if (geoJson.contains("Feature")) {
+                    Feature feature = (Feature) GeoJSONFactory.create(geoJson);
+                    ArrayList<String> nonSpatialData = new ArrayList<>();
+                    Map<String, Object> featurePropertiesproperties = feature.getProperties();
+                    if (feature.getId() != null) {
+                        nonSpatialData.add(feature.getId().toString());
                     }
-                    else {
-                        nonSpatialData.add(property.toString());
+                    if (featurePropertiesproperties != null) {
+                        for (Object property : featurePropertiesproperties.values()) {
+                            if (property == null) {
+                                nonSpatialData.add("null");
+                            }
+                            else {
+                                nonSpatialData.add(property.toString());
+                            }
+                        }
                     }
+                    geometry = geoJSONReader.read(feature.getGeometry());
+                    handleNonSpatialDataToGeometry(geometry, nonSpatialData);
                 }
-            }
-            geometry = geoJSONReader.read(feature.getGeometry());
-            handleNonSpatialDataToGeometry(geometry, nonSpatialData);
-        }
-        else {
-            geometry = geoJSONReader.read(geoJson);
-        }
+                else {
+                    geometry = geoJSONReader.read(geoJson);
+                }
+    }
         return geometry;
+    }
+
+    public Geometry parseGridPoint(String json,int level){
+        List<Coordinate> co = new ArrayList<>();
+        JSONObject jsonObject = JSONObject.parseObject(json);
+        JSONObject geometry = jsonObject.getJSONObject("geometry");
+        JSONArray coordinates = geometry.getJSONArray("coordinates");
+        double lng = coordinates.getDouble(0);
+        double lat = coordinates.getDouble(1);
+        co.add(new Coordinate(lng,lat));
+        return new GridPoint(new CoordinateArraySequence(co.toArray(new Coordinate[0])),new GeometryFactory(),level);
+    }
+
+
+    public Geometry parseGridPolygon(String json, int level){
+        List<Coordinate> cos = new ArrayList<Coordinate>();
+        JSONObject jsonObject = JSONObject.parseObject(json);
+        JSONObject geometry = jsonObject.getJSONObject("geometry");
+        JSONArray co = geometry.getJSONArray("coordinates");
+        String type = geometry.getString("type");
+        JSONArray coordinates;
+        if(type.equals("MultiPolygon")){
+            coordinates = co.getJSONArray(0).getJSONArray(0);
+        } else{
+            coordinates = co.getJSONArray(0);
+        }
+        Coordinate firstPoint = new Coordinate(coordinates.getJSONArray(0).getDouble(0),coordinates.getJSONArray(0).getDouble(1));
+        cos.add(firstPoint);
+        for(int i = 1; i < coordinates.size(); i++){
+            JSONArray coordinate = coordinates.getJSONArray(i);
+            double lng = coordinate.getDouble(0);
+            double lat = coordinate.getDouble(1);
+            Coordinate currentPoint = new Coordinate(lng,lat);
+            cos.add(new Coordinate(lng,lat));
+            if(currentPoint.equals2D(firstPoint)){
+                break;
+            }
+        }
+        LinearRing shell = new LinearRing(new CoordinateArraySequence(cos.toArray(new Coordinate[0])),new GeometryFactory());
+        GridPolygon2 gridPolygon = new GridPolygon2(shell,null,new GeometryFactory(),level,5);
+        return gridPolygon;
     }
 
     public List<String> readPropertyNames(String geoString)
@@ -253,10 +298,10 @@ public class FormatMapper<T extends Geometry>
     public Coordinate[] readCoordinates(String line)
     {
         final String[] columns = line.split(splitter.getDelimiter());
-        final int actualEndOffset = this.endOffset >= 0 ? this.endOffset : (this.geometryType == GeometryType.POINT ? startOffset + 1 : columns.length - 1);
+        final int actualEndOffset = this.endOffset >= 0 ? this.endOffset : ((this.geometryType == GeometryType.POINT || this.geometryType == GeometryType.GRIDPOINT) ? startOffset + 1 : columns.length - 1);
         final Coordinate[] coordinates = new Coordinate[(actualEndOffset - startOffset + 1) / 2];
         for (int i = this.startOffset; i <= actualEndOffset; i += 2) {
-            coordinates[(i - startOffset) / 2] = new Coordinate(Double.parseDouble(columns[i]), Double.parseDouble(columns[i + 1]));
+            coordinates[(i - startOffset) / 2] = new Coordinate(Double.parseDouble(columns[i+1]), Double.parseDouble(columns[i]));
         }
         if (carryInputData) {
             boolean firstColumnFlag = true;
@@ -340,11 +385,23 @@ public class FormatMapper<T extends Geometry>
             case POINT:
                 geometry = geometryFactory.createPoint(coordinates[0]);
                 break;
+            case GRIDPOINT:
+                List<Coordinate> co = new ArrayList<>();
+                co.add(coordinates[0]);
+                geometry = new GridPoint(new CoordinateArraySequence(co.toArray(new Coordinate[0])),geometryFactory,25);
+                break;
             case POLYGON:
                 geometry = geometryFactory.createPolygon(coordinates);
                 break;
+            case GRIDPOLYGON:
+                LinearRing shell = new LinearRing(new CoordinateArraySequence(coordinates),new GeometryFactory());
+                geometry = new GridPolygon2(shell,null,geometryFactory,25,5);
+                break;
             case LINESTRING:
                 geometry = geometryFactory.createLineString(coordinates);
+                break;
+            case GRIDLINRSTRING:
+
                 break;
             case RECTANGLE:
                 // The rectangle mapper reads two coordinates from the input line. The two coordinates are the two on the diagonal.

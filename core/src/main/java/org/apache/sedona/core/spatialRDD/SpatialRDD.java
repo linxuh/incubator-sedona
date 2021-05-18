@@ -19,16 +19,14 @@
 
 package org.apache.sedona.core.spatialRDD;
 
+import com.whu.edu.JTS.GridPoint;
+import com.whu.edu.JTS.GridPolygon2;
 import org.apache.commons.lang.NullArgumentException;
 import org.apache.log4j.Logger;
 import org.apache.sedona.core.enums.GridType;
 import org.apache.sedona.core.enums.IndexType;
 import org.apache.sedona.core.geometryObjects.GeoJSONWriterNew;
-import org.apache.sedona.core.spatialPartitioning.FlatGridPartitioner;
-import org.apache.sedona.core.spatialPartitioning.KDBTree;
-import org.apache.sedona.core.spatialPartitioning.KDBTreePartitioner;
-import org.apache.sedona.core.spatialPartitioning.QuadtreePartitioning;
-import org.apache.sedona.core.spatialPartitioning.SpatialPartitioner;
+import org.apache.sedona.core.spatialPartitioning.*;
 import org.apache.sedona.core.spatialPartitioning.quadtree.QuadTreePartitioner;
 import org.apache.sedona.core.spatialPartitioning.quadtree.StandardQuadTree;
 import org.apache.sedona.core.spatialRddTool.IndexBuilder;
@@ -232,13 +230,18 @@ public class SpatialRDD<T extends Geometry>
         // See https://github.com/apache/spark/blob/412b0e8969215411b97efd3d0984dc6cac5d31e0/core/src/main/scala/org/apache/spark/rdd/RDD.scala#L508
         // Here, we choose to get samples faster over getting exactly specified number of samples.
         final double fraction = SamplingUtils.computeFractionForSampleSize(sampleNumberOfRecords, approximateTotalCount, false);
-        List<Envelope> samples = this.rawSpatialRDD.sample(false, fraction)
-                .map(new Function<T, Envelope>()
+        List samples = this.rawSpatialRDD.sample(false, fraction)
+                .map(new Function<T, Object>()
                 {
                     @Override
-                    public Envelope call(T geometry)
+                    public Object call(T geometry)
                             throws Exception
                     {
+                        if(geometry instanceof GridPolygon2){
+                            return new AdaptiveGrid(((GridPolygon2)geometry).getGridID());
+                        }else if(geometry instanceof GridPoint){
+                            return new AdaptiveGrid(((GridPoint)geometry).getId());
+                        }
                         return geometry.getEnvelopeInternal();
                     }
                 })
@@ -253,14 +256,20 @@ public class SpatialRDD<T extends Geometry>
                 boundaryEnvelope.getMinY(), boundaryEnvelope.getMaxY() + 0.01);
 
         switch (gridType) {
+            case AGRIDQUADTREE:{
+                GridQuadTreePartitioning adaptivePartitioning = new GridQuadTreePartitioning((List<AdaptiveGrid>) samples,boundaryEnvelope,numPartitions);
+                partitioner = new GridQuadTreePartitioner(adaptivePartitioning.getPartitionTree());
+
+                break;
+            }
             case QUADTREE: {
-                QuadtreePartitioning quadtreePartitioning = new QuadtreePartitioning(samples, paddedBoundary, numPartitions);
+                QuadtreePartitioning quadtreePartitioning = new QuadtreePartitioning((List<Envelope>) samples, paddedBoundary, numPartitions);
                 partitioner = new QuadTreePartitioner(quadtreePartitioning.getPartitionTree());
                 break;
             }
             case KDBTREE: {
                 final KDBTree tree = new KDBTree(samples.size() / numPartitions, numPartitions, paddedBoundary);
-                for (final Envelope sample : samples) {
+                for (final Envelope sample : (List<Envelope>)samples) {
                     tree.insert(sample);
                 }
                 tree.assignLeafIds();
@@ -402,6 +411,21 @@ public class SpatialRDD<T extends Geometry>
                 throw new Exception("[AbstractSpatialRDD][buildIndex] spatialPartitionedRDD is null. Please do spatial partitioning before build index.");
             }
             this.indexedRDD = this.spatialPartitionedRDD.mapPartitions(new IndexBuilder(indexType));
+        }
+    }
+
+    public void buildIndex(final IndexType indexType, boolean buildIndexOnSpatialPartitionedRDD, SpatialPartitioner sp)
+            throws Exception
+    {
+        if (buildIndexOnSpatialPartitionedRDD == false) {
+            //This index is built on top of unpartitioned SRDD
+            this.indexedRawRDD = this.rawSpatialRDD.mapPartitions(new IndexBuilder(indexType));
+        }
+        else {
+            if (this.spatialPartitionedRDD == null) {
+                throw new Exception("[AbstractSpatialRDD][buildIndex] spatialPartitionedRDD is null. Please do spatial partitioning before build index.");
+            }
+            this.indexedRDD = this.spatialPartitionedRDD.mapPartitions(new IndexBuilder(indexType,sp.getDedupParams()));
         }
     }
 

@@ -20,6 +20,9 @@
 package org.apache.sedona.core.serde;
 
 import com.esotericsoftware.kryo.Kryo;
+import com.whu.edu.JTS.GridLineString;
+import com.whu.edu.JTS.GridPoint;
+import com.whu.edu.JTS.GridPolygon2;
 import org.apache.log4j.Logger;
 import org.apache.sedona.core.geometryObjects.Circle;
 import org.apache.sedona.core.geometryObjects.GeometrySerde;
@@ -33,6 +36,7 @@ import org.locationtech.jts.geom.MultiPoint;
 import org.locationtech.jts.geom.MultiPolygon;
 import org.locationtech.jts.geom.Point;
 import org.locationtech.jts.geom.Polygon;
+import org.locationtech.jts.index.adaptivequadtree.AdaptiveQuadTreeIndex;
 import org.locationtech.jts.index.quadtree.Quadtree;
 import org.locationtech.jts.index.strtree.STRtree;
 
@@ -59,8 +63,12 @@ public class SedonaKryoRegistrator
         kryo.register(GeometryCollection.class, serializer);
         kryo.register(Circle.class, serializer);
         kryo.register(Envelope.class, serializer);
+        kryo.register(GridPoint.class,serializer);
+        kryo.register(GridLineString.class,serializer);
+        kryo.register(GridPolygon2.class,serializer);
         // TODO: Replace the default serializer with default spatial index serializer
         kryo.register(Quadtree.class, indexSerializer);
         kryo.register(STRtree.class, indexSerializer);
+        kryo.register(AdaptiveQuadTreeIndex.class, indexSerializer);
     }
 }

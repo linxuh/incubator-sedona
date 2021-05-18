@@ -40,7 +40,12 @@ public enum GridType
     /**
      * K-D-B-tree partitioning (k-dimensional B-tree)
      */
-    KDBTREE;
+    KDBTREE,
+
+    /**
+     * adaptive grid quad partitioning
+     */
+    AGRIDQUADTREE;
 
     /**
      * Gets the grid type.

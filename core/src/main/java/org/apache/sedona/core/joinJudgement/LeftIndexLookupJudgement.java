@@ -19,10 +19,14 @@
 
 package org.apache.sedona.core.joinJudgement;
 
+import com.whu.edu.JTS.GridPoint;
+import com.whu.edu.JTS.GridPolygon2;
 import org.apache.commons.lang3.tuple.Pair;
+import org.apache.sedona.core.spatialPartitioning.AdaptiveGrid;
 import org.apache.spark.api.java.function.FlatMapFunction2;
 import org.locationtech.jts.geom.Geometry;
 import org.locationtech.jts.index.SpatialIndex;
+import org.locationtech.jts.index.adaptivequadtree.AdaptiveQuadTreeIndex;
 
 import javax.annotation.Nullable;
 
@@ -59,7 +63,16 @@ public class LeftIndexLookupJudgement<T extends Geometry, U extends Geometry>
         SpatialIndex treeIndex = indexIterator.next();
         while (streamShapes.hasNext()) {
             U streamShape = streamShapes.next();
-            List<Geometry> candidates = treeIndex.query(streamShape.getEnvelopeInternal());
+            List<Geometry> candidates;
+            if(treeIndex instanceof AdaptiveQuadTreeIndex){
+                if(streamShape instanceof GridPolygon2){
+                    candidates = treeIndex.query(new AdaptiveGrid(((GridPolygon2)streamShape).getGridID()));
+                }else{
+                    candidates = treeIndex.query(new AdaptiveGrid(((GridPoint)streamShape).getId()));
+                }
+            }else{
+                candidates = treeIndex.query(streamShape.getEnvelopeInternal());
+            }
             for (Geometry candidate : candidates) {
                 // Refine phase. Use the real polygon (instead of its MBR) to recheck the spatial relation.
                 if (match(candidate, streamShape)) {

@@ -79,6 +79,18 @@
             <scope>${dependency.scope}</scope>
         </dependency>
         <dependency>
+            <groupId>com.alibaba</groupId>
+            <artifactId>fastjson</artifactId>
+            <version>1.2.75</version>
+            <scope>${dependency.scope}</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.whu.edu</groupId>
+            <artifactId>JTS</artifactId>
+            <version>1.0</version>
+            <scope>${dependency.scope}</scope>
+        </dependency>
+        <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-core</artifactId>
             <version>${jackson.version}</version>
