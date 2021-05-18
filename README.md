@@ -16,6 +16,9 @@ Apache Sedona™(incubating) is a cluster computing system for processing large-
 |Viz |  RDD, SQL/DataFrame | Visualization for Spatial RDD and DataFrame|
 |Zeppelin |  Apache Zeppelin | Plugin for Apache Zeppelin 0.8.1+|
 
+### AdaptiveGrid branch
+this branch add adaptiveGrid representation of spatial object, supporting an adaptive grid partitioning method and spatial index.In addition,spatial join using adptivegrid is achieve, which perform better than origin method 
+
 ### Sedona supports several programming languages: Scala, Java, SQL, Python and R.
 
 ## Compile the source code
